@@ -44,9 +44,8 @@ public class SiteDaoRedisImpl implements SiteDao {
     @Override
     public Set<Site> findAll() {
         try (Jedis jedis = jedisPool.getResource()) {
-            String siteIDsKey = RedisSchema.getSiteIDsKey();
-            Set<String> members = jedis.smembers(siteIDsKey);
-            return members.stream()
+            return jedis.smembers(RedisSchema.getSiteIDsKey())
+                    .stream()
                     .map(m -> new Site(jedis.hgetAll(m)))
                     .collect(Collectors.toSet());
         }
