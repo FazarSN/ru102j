@@ -5,13 +5,15 @@ import com.redislabs.university.RU102J.api.MeterReading;
 import com.redislabs.university.RU102J.api.MetricUnit;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.Tuple;
 
 import java.text.DecimalFormat;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Retain metrics using Redis sorted sets.
@@ -25,8 +27,7 @@ public class MetricDaoRedisZsetImpl implements MetricDao {
     static private final Integer MAX_METRIC_RETENTION_DAYS = 30;
     static private final Integer MAX_DAYS_TO_RETURN = 7;
     static private final Integer METRICS_PER_DAY = 60 * 24;
-    static private final Integer METRIC_EXPIRATION_SECONDS =
-            60 * 60 * 24 * MAX_METRIC_RETENTION_DAYS + 1;
+    static private final Integer METRIC_EXPIRATION_SECONDS = 60 * 60 * 24 * MAX_METRIC_RETENTION_DAYS + 1;
     private final JedisPool jedisPool;
 
     public MetricDaoRedisZsetImpl(JedisPool jedisPool) {
@@ -47,11 +48,10 @@ public class MetricDaoRedisZsetImpl implements MetricDao {
 
     // Challenge #2
     private void insertMetric(Jedis jedis, long siteId, double value, MetricUnit unit,
-                              ZonedDateTime dateTime) {
-        // START Challenge #2
+            ZonedDateTime dateTime) {
         String metricKey = RedisSchema.getDayMetricKey(siteId, unit, dateTime);
         Integer minuteOfDay = getMinuteOfDay(dateTime);
-        // END Challenge #2
+        jedis.zadd(metricKey, minuteOfDay, value + ":" + minuteOfDay);
     }
 
     /**
@@ -62,7 +62,7 @@ public class MetricDaoRedisZsetImpl implements MetricDao {
      */
     @Override
     public List<Measurement> getRecent(Long siteId, MetricUnit unit,
-                                       ZonedDateTime time, Integer limit) {
+            ZonedDateTime time, Integer limit) {
         if (limit > METRICS_PER_DAY * MAX_METRIC_RETENTION_DAYS) {
             throw new IllegalArgumentException("Cannot request more than two weeks" +
                     "of minute-level data");
@@ -92,9 +92,9 @@ public class MetricDaoRedisZsetImpl implements MetricDao {
      * the siteId, date, and metric unit specified here.
      */
     private List<Measurement> getMeasurementsForDate(Long siteId,
-                                                     ZonedDateTime date,
-                                                     MetricUnit unit,
-                                                     Integer count) {
+            ZonedDateTime date,
+            MetricUnit unit,
+            Integer count) {
         // A list of Measurement objects to return.
         List<Measurement> measurements = new ArrayList<>();
 
@@ -129,16 +129,15 @@ public class MetricDaoRedisZsetImpl implements MetricDao {
     }
 
     private ZonedDateTime getDateFromDayMinute(ZonedDateTime dateTime,
-                                               Integer dayMinute) {
-       int minute = dayMinute % 60;
-       int hour = dayMinute / 60;
-       return dateTime.withHour(hour).withMinute(minute).
-               withZoneSameInstant(ZoneOffset.UTC);
+            Integer dayMinute) {
+        int minute = dayMinute % 60;
+        int hour = dayMinute / 60;
+        return dateTime.withHour(hour).withMinute(minute).withZoneSameInstant(ZoneOffset.UTC);
     }
 
     // Return the minute of the day. For example:
-    //  01:12 is the 72nd minute of the day
-    //  5:00 is the 300th minute of the day
+    // 01:12 is the 72nd minute of the day
+    // 5:00 is the 300th minute of the day
     public Integer getMinuteOfDay(ZonedDateTime dateTime) {
         int hour = dateTime.getHour();
         int minute = dateTime.getMinute();
